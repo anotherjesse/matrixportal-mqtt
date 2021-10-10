@@ -3,10 +3,14 @@
 
 import board
 import busio
+import time
 from digitalio import DigitalInOut
 import adafruit_requests as requests
 import adafruit_esp32spi.adafruit_esp32spi_socket as socket
 from adafruit_esp32spi import adafruit_esp32spi
+import adafruit_minimqtt.adafruit_minimqtt as MQTT
+import adafruit_esp32spi.adafruit_esp32spi_socket as socket
+
 
 # Get wifi details and more from a secrets.py file
 try:
@@ -18,7 +22,6 @@ except ImportError:
 print("ESP32 SPI webclient test")
 
 TEXT_URL = "http://wifitest.adafruit.com/testwifi/index.html"
-JSON_URL = "http://api.coindesk.com/v1/bpi/currentprice/USD.json"
 
 
 # If you are using a board with pre-defined ESP32 Pins:
@@ -67,23 +70,75 @@ print("My IP address is", esp.pretty_ip(esp.ip_address))
 print(
     "IP lookup adafruit.com: %s" % esp.pretty_ip(esp.get_host_by_name("adafruit.com"))
 )
-print("Ping google.com: %d ms" % esp.ping("google.com"))
 
-# esp._debug = True
-print("Fetching text from", TEXT_URL)
-r = requests.get(TEXT_URL)
-print("-" * 40)
-print(r.text)
-print("-" * 40)
-r.close()
+mqtt_topic = "test/topic"
 
-print()
-print("Fetching json from", JSON_URL)
-r = requests.get(JSON_URL)
-print("-" * 40)
-print(r.json())
-print("-" * 40)
-r.close()
+def connect(mqtt_client, userdata, flags, rc):
+    # This function will be called when the mqtt_client is connected
+    # successfully to the broker.
+    print("Connected to MQTT Broker!")
+    print("Flags: {0}\n RC: {1}".format(flags, rc))
 
-print("Done!")
+def disconnect(mqtt_client, userdata, rc):
+    # This method is called when the mqtt_client disconnects
+    # from the broker.
+    print("Disconnected from MQTT Broker!")
 
+
+def subscribe(mqtt_client, userdata, topic, granted_qos):
+    # This method is called when the mqtt_client subscribes to a new feed.
+    print("Subscribed to {0} with QOS level {1}".format(topic, granted_qos))
+
+
+def unsubscribe(mqtt_client, userdata, topic, pid):
+    # This method is called when the mqtt_client unsubscribes from a feed.
+    print("Unsubscribed from {0} with PID {1}".format(topic, pid))
+
+
+def publish(mqtt_client, userdata, topic, pid):
+    # This method is called when the mqtt_client publishes data to a feed.
+    print("Published to {0} with PID {1}".format(topic, pid))
+
+
+def message(client, topic, message):
+    # Method callled when a client's subscribed feed has a new value.
+    print("New message on topic {0}: {1}".format(topic, message))
+
+mqtt_client = MQTT.MQTT(
+    broker=secrets["broker"],
+    port=secrets["port"],
+    socket_pool=socket,
+    is_ssl=False
+)
+
+mqtt_topic = "matrix"
+mqtt_client.on_connect = connect
+mqtt_client.on_disconnect = disconnect
+mqtt_client.on_subscribe = subscribe
+mqtt_client.on_unsubscribe = unsubscribe
+mqtt_client.on_publish = publish
+mqtt_client.on_message = message
+
+print("Attempting to connect to %s" % mqtt_client.broker)
+mqtt_client.connect()
+
+print("Subscribing to %s" % mqtt_topic)
+mqtt_client.subscribe(mqtt_topic)
+
+# print("Publishing to %s" % mqtt_topic)
+# mqtt_client.publish(mqtt_topic, "Hello Broker!")
+
+# print("Unsubscribing from %s" % mqtt_topic)
+# mqtt_client.unsubscribe(mqtt_topic)
+
+# print("Disconnecting from %s" % mqtt_client.broker)
+# mqtt_client.disconnect()
+
+while True:
+    # Poll the message queue
+    mqtt_client.loop()
+
+    # Send a new message
+    # print("Sent!")
+    # photocell_val += 1
+    time.sleep(0.25)
